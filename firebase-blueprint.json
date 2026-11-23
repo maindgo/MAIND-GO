@@ -423,6 +423,30 @@
         "generatedByAi",
         "createdAt"
       ]
+    },
+    "MaintenanceConfig": {
+      "title": "MaintenanceConfig",
+      "description": "Global platform maintenance mode state controlled exclusively by verified admin",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "updatedByUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["enabled", "message", "updatedByUid", "updatedAt"]
     }
   },
   "firestore": {
@@ -461,6 +485,12 @@
         "$ref": "#/entities/PurchaseInvoice"
       },
       "description": "Official AI-generated invoices sent by admin for confirmed VIP/PRO purchases"
+    },
+    "/appConfig/{docId}": {
+      "schema": {
+        "$ref": "#/entities/MaintenanceConfig"
+      },
+      "description": "Publicly readable non-PII maintenance mode configuration written only by admin"
     }
   }
 }

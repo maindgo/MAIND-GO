@@ -247,6 +247,15 @@ async function fetchGoogleWeatherDaily(
   }
 }
 
+export async function fetchWeatherAlertsForCoords(
+  lat: number,
+  lng: number,
+  apiKey: string,
+  signal?: AbortSignal
+): Promise<WeatherAlertItem[]> {
+  return fetchGoogleWeatherAlerts(lat, lng, apiKey, signal);
+}
+
 async function fetchGoogleWeatherAlerts(
   lat: number,
   lng: number,

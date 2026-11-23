@@ -4,12 +4,15 @@ import {
   CheckCircle2,
   Clock,
   Crown,
+  Eye,
   FileText,
   LogIn,
   LogOut,
+  Power,
   ShieldCheck,
   Sparkles,
   UserPlus,
+  Wrench,
   XCircle,
 } from 'lucide-react';
 import {FormEvent, useEffect, useState} from 'react';
@@ -22,9 +25,10 @@ interface AccountAuthPageProps {
   units: UnitSystem;
   onUnitsChange: (u: UnitSystem) => void;
   onNavigate: (page: AppPage) => void;
+  onPreviewMaintenance?: () => void;
 }
 
-export function AccountAuthPage({units, onUnitsChange, onNavigate}: AccountAuthPageProps) {
+export function AccountAuthPage({units, onUnitsChange, onNavigate, onPreviewMaintenance}: AccountAuthPageProps) {
   const {
     firebaseUser,
     authReady,
@@ -49,6 +53,8 @@ export function AccountAuthPage({units, onUnitsChange, onNavigate}: AccountAuthP
     adminRejectPayment,
     adminProcessRefund,
     adminGenerateAndSendInvoice,
+    maintenanceConfig,
+    toggleMaintenanceMode,
   } = useAuth();
 
   const [authTab, setAuthTab] = useState<'signup' | 'login'>('signup');
@@ -65,6 +71,13 @@ export function AccountAuthPage({units, onUnitsChange, onNavigate}: AccountAuthP
   const [refundAdminNotes, setRefundAdminNotes] = useState<Record<string, string>>({});
   const [invoiceBusyId, setInvoiceBusyId] = useState<string | null>(null);
   const [activeInvoice, setActiveInvoice] = useState<PurchaseInvoice | null>(null);
+  const [maintMessageDraft, setMaintMessageDraft] = useState(maintenanceConfig.message || '');
+  const [maintBusy, setMaintBusy] = useState(false);
+  const [maintFeedback, setMaintFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMaintMessageDraft(maintenanceConfig.message || '');
+  }, [maintenanceConfig.message]);
 
   useEffect(() => {
     if (userAccount?.displayName) {
@@ -169,7 +182,7 @@ export function AccountAuthPage({units, onUnitsChange, onNavigate}: AccountAuthP
           <div className="text-center space-y-1.5">
             <h1 className="font-display text-2xl font-bold text-white">MAIND GO Account</h1>
             <p className="text-xs text-slate-400">
-              Sign up or log in to save weather locations and track VIP subscription confirmation.
+              Browse maps and forecasts freely in Guest Mode, or sign in to save favourite locations, sync preferences, and manage VIP plans.
             </p>
           </div>
 
@@ -522,9 +535,138 @@ export function AccountAuthPage({units, onUnitsChange, onNavigate}: AccountAuthP
           </div>
         )}
 
-        {/* Admin Payment Confirmation & AI Invoice Dashboard */}
+        {/* Admin Maintenance Control & Dashboards */}
         {isAdmin && (
           <div className="space-y-6">
+            {/* Admin Maintenance Mode Control Card */}
+            <div
+              className={`rounded-2xl p-5 sm:p-6 space-y-4 border transition-colors ${
+                maintenanceConfig.enabled
+                  ? 'bg-amber-950/20 border-amber-500/50'
+                  : 'bg-[#0B0E17] border-slate-800/90'
+              }`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
+                      maintenanceConfig.enabled
+                        ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                        : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
+                    }`}
+                  >
+                    <Wrench className="w-5 h-5" aria-hidden="true" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="font-display text-lg font-semibold text-white">
+                        Admin Maintenance Mode Control
+                      </h2>
+                      <span
+                        className={`px-2 py-0.5 rounded font-mono text-[11px] font-semibold ${
+                          maintenanceConfig.enabled
+                            ? 'bg-amber-500 text-slate-950'
+                            : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/35'
+                        }`}
+                      >
+                        {maintenanceConfig.enabled ? 'MAINTENANCE ON (HTTP 503)' : 'PUBLIC LIVE'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 max-w-2xl">
+                      When enabled, all public visitors see the full-screen Maintenance Page and receive HTTP 503 on public routes. Only verified administrators can access the platform and disable maintenance.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {onPreviewMaintenance && (
+                    <button
+                      type="button"
+                      onClick={onPreviewMaintenance}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl bg-[#111827] border border-slate-700 hover:border-slate-500 text-xs font-medium text-slate-200 transition-colors"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
+                      <span>Preview Page</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={maintenanceConfig.enabled}
+                    disabled={maintBusy}
+                    onClick={async () => {
+                      setMaintBusy(true);
+                      setMaintFeedback(null);
+                      try {
+                        const nextEnabled = !maintenanceConfig.enabled;
+                        await toggleMaintenanceMode(nextEnabled, maintMessageDraft);
+                        setMaintFeedback(
+                          nextEnabled
+                            ? 'Maintenance Mode enabled. Public visitors now see the Maintenance Page (HTTP 503).'
+                            : 'Maintenance Mode disabled. Public access to MAIND GO is restored.'
+                        );
+                      } catch (err) {
+                        setMaintFeedback(
+                          formatUiError(err, 'Unable to update maintenance mode state.')
+                        );
+                      } finally {
+                        setMaintBusy(false);
+                      }
+                    }}
+                    className={`inline-flex items-center gap-2 px-4 py-2 min-h-[40px] rounded-xl text-xs font-semibold transition-colors disabled:opacity-60 ${
+                      maintenanceConfig.enabled
+                        ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'
+                        : 'bg-amber-400 text-slate-950 hover:bg-amber-300'
+                    }`}
+                  >
+                    <Power className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>
+                      {maintBusy
+                        ? 'Updating...'
+                        : maintenanceConfig.enabled
+                          ? 'Turn Maintenance OFF'
+                          : 'Turn Maintenance ON'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  maxLength={240}
+                  value={maintMessageDraft}
+                  onChange={(e) => setMaintMessageDraft(e.target.value)}
+                  placeholder="Optional admin status note shown under description (max 240 chars)"
+                  className="flex-1 px-3 py-2 rounded-lg bg-[#111827] border border-slate-700 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-400"
+                />
+                <button
+                  type="button"
+                  disabled={maintBusy}
+                  onClick={async () => {
+                    setMaintBusy(true);
+                    setMaintFeedback(null);
+                    try {
+                      await toggleMaintenanceMode(maintenanceConfig.enabled, maintMessageDraft);
+                      setMaintFeedback('Maintenance status note updated.');
+                    } catch (err) {
+                      setMaintFeedback(formatUiError(err, 'Unable to update status note.'));
+                    } finally {
+                      setMaintBusy(false);
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 disabled:opacity-60 shrink-0 transition-colors"
+                >
+                  Save Note
+                </button>
+              </div>
+
+              {maintFeedback && (
+                <p className="text-xs font-medium text-cyan-300">{maintFeedback}</p>
+              )}
+            </div>
+
             <div className="bg-[#0B0E17] border border-cyan-500/35 rounded-2xl p-5 sm:p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">

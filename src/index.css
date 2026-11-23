@@ -17,6 +17,7 @@
     background-color: #07090e;
     color: #f1f5f9;
     font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
   }
 }
 
@@ -31,12 +32,49 @@
 }
 
 .maingo-scroll::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.22);
   border-radius: 3px;
 }
 
 .maingo-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.35);
+  background: rgba(148, 163, 184, 0.38);
+}
+
+/* Seamless right-to-left continuous announcement marquee */
+@keyframes maingo-marquee-rtl {
+  0% {
+    transform: translate3d(0%, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.maingo-marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: maingo-marquee-rtl 32s linear infinite;
+}
+
+.maingo-marquee-wrap:hover .maingo-marquee-track,
+.maingo-marquee-wrap:focus-within .maingo-marquee-track {
+  animation-play-state: paused;
+}
+
+/* Subtle orbital rotation for Earth horizon glow */
+@keyframes maingo-orbit-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.maingo-orbit-ring {
+  animation: maingo-orbit-spin 80s linear infinite;
+  will-change: transform;
 }
 
 /* Google Maps InfoWindow dark styling override */
@@ -58,6 +96,18 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .maingo-marquee-track {
+    animation: none !important;
+    transform: none !important;
+    width: 100%;
+    justify-content: center;
+  }
+  .maingo-marquee-duplicate {
+    display: none !important;
+  }
+  .maingo-orbit-ring {
+    animation: none !important;
+  }
   *,
   *::before,
   *::after {

@@ -10,21 +10,22 @@ const PORT = Number(process.env.PORT) || 3000;
 
 interface FirebaseClientConfig {
   apiKey?: string;
+  projectId?: string;
+  firestoreDatabaseId?: string;
 }
 
-function loadFirebaseApiKey(): string {
+function loadFirebaseConfig(): FirebaseClientConfig {
   try {
     const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
     const raw = fs.readFileSync(configPath, 'utf-8');
-    const parsed = JSON.parse(raw) as FirebaseClientConfig;
-    return typeof parsed.apiKey === 'string' ? parsed.apiKey : '';
+    return JSON.parse(raw) as FirebaseClientConfig;
   } catch {
-    return '';
+    return {};
   }
 }
 
 async function verifyAdminFirebaseToken(idToken: string): Promise<{email: string} | null> {
-  const apiKey = loadFirebaseApiKey();
+  const apiKey = loadFirebaseConfig().apiKey || '';
   if (!apiKey || !idToken) return null;
 
   const lookupRes = await fetch(
@@ -47,6 +48,84 @@ async function verifyAdminFirebaseToken(idToken: string): Promise<{email: string
   return {email: user.email};
 }
 
+interface ServerMaintenanceState {
+  enabled: boolean;
+  message: string;
+  fetchedAtMs: number;
+}
+
+const MAINTENANCE_CACHE_TTL_MS = 2500;
+let maintenanceCache: ServerMaintenanceState = {
+  enabled: false,
+  message: '',
+  fetchedAtMs: 0,
+};
+
+async function fetchMaintenanceFromFirestore(): Promise<ServerMaintenanceState> {
+  const {projectId, firestoreDatabaseId} = loadFirebaseConfig();
+  if (!projectId) {
+    return {enabled: false, message: '', fetchedAtMs: Date.now()};
+  }
+  const dbId = firestoreDatabaseId || '(default)';
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+    projectId
+  )}/databases/${encodeURIComponent(dbId)}/documents/appConfig/maintenance`;
+
+  try {
+    const resp = await fetch(url, {method: 'GET', cache: 'no-store'});
+    if (resp.status === 404) {
+      maintenanceCache = {enabled: false, message: '', fetchedAtMs: Date.now()};
+      return maintenanceCache;
+    }
+    if (!resp.ok) {
+      return maintenanceCache;
+    }
+    const json = (await resp.json()) as {
+      fields?: {
+        enabled?: {booleanValue?: boolean};
+        message?: {stringValue?: string};
+      };
+    };
+    const enabled = Boolean(json.fields?.enabled?.booleanValue);
+    const message = String(json.fields?.message?.stringValue || '').slice(0, 240);
+    maintenanceCache = {enabled, message, fetchedAtMs: Date.now()};
+    return maintenanceCache;
+  } catch {
+    return maintenanceCache;
+  }
+}
+
+async function getMaintenanceState(force = false): Promise<ServerMaintenanceState> {
+  if (!force && Date.now() - maintenanceCache.fetchedAtMs < MAINTENANCE_CACHE_TTL_MS) {
+    return maintenanceCache;
+  }
+  return fetchMaintenanceFromFirestore();
+}
+
+function isHtmlPageRequest(req: Request): boolean {
+  if (req.method !== 'GET') return false;
+  const p = req.path;
+  if (
+    p.startsWith('/api/') ||
+    p.startsWith('/assets/') ||
+    p.startsWith('/@') ||
+    p.startsWith('/src/') ||
+    p.startsWith('/node_modules/')
+  ) {
+    return false;
+  }
+  const lastSegment = p.split('/').pop() || '';
+  if (lastSegment.includes('.')) {
+    return false;
+  }
+  const accept = String(req.headers.accept || '');
+  return accept.includes('text/html') || accept === '*/*' || p === '/';
+}
+
+function isAdminAccessRoute(req: Request): boolean {
+  return req.path === '/admin' || req.path.startsWith('/admin/') || req.query.admin === '1';
+}
+
 interface InvoiceGenerateBody {
   paymentRequestId?: unknown;
   userDisplayName?: unknown;
@@ -63,6 +142,41 @@ interface InvoiceGenerateBody {
 async function startServer() {
   const app = express();
   app.use(express.json({limit: '64kb'}));
+
+  app.get('/api/maintenance/status', async (_req: Request, res: Response) => {
+    const state = await getMaintenanceState();
+    res.set('Cache-Control', 'no-store');
+    res.json({enabled: state.enabled, message: state.message});
+  });
+
+  app.post('/api/maintenance/refresh', async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+      if (!token) {
+        res.status(401).json({error: 'Missing authorization token.'});
+        return;
+      }
+      const verifiedAdmin = await verifyAdminFirebaseToken(token);
+      if (!verifiedAdmin) {
+        res.status(403).json({error: 'Admin verification required.'});
+        return;
+      }
+      const body = (req.body || {}) as {enabled?: unknown; message?: unknown};
+      if (typeof body.enabled === 'boolean') {
+        maintenanceCache = {
+          enabled: body.enabled,
+          message: String(body.message || '').slice(0, 240),
+          fetchedAtMs: Date.now(),
+        };
+      } else {
+        await getMaintenanceState(true);
+      }
+      res.json({enabled: maintenanceCache.enabled, message: maintenanceCache.message});
+    } catch {
+      res.status(500).json({error: 'Failed to sync maintenance state.'});
+    }
+  });
 
   app.post('/api/generate-invoice', async (req: Request, res: Response) => {
     try {
@@ -280,12 +394,53 @@ async function startServer() {
       server: {middlewareMode: true},
       appType: 'spa',
     });
+
+    app.use(async (req: Request, res: Response, next) => {
+      if (isHtmlPageRequest(req) && !isAdminAccessRoute(req)) {
+        const state = await getMaintenanceState();
+        if (state.enabled) {
+          try {
+            const rawHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+            const transformed = await vite.transformIndexHtml(req.originalUrl, rawHtml);
+            res
+              .status(503)
+              .set({
+                'Content-Type': 'text/html; charset=utf-8',
+                'Retry-After': '300',
+                'Cache-Control': 'no-store, no-cache, must-revalidate',
+                'X-Maintenance-Mode': 'active',
+              })
+              .send(transformed);
+            return;
+          } catch {
+            // Fall through to Vite middleware if HTML transform fails
+          }
+        }
+      }
+      next();
+    });
+
     app.use(vite.middlewares);
   } else {
     const distDir = path.resolve(process.cwd(), 'dist');
-    app.use(express.static(distDir));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.join(distDir, 'index.html'));
+    app.use(express.static(distDir, {index: false}));
+    app.get('*', async (req: Request, res: Response) => {
+      const indexFile = path.join(distDir, 'index.html');
+      if (isHtmlPageRequest(req) && !isAdminAccessRoute(req)) {
+        const state = await getMaintenanceState();
+        if (state.enabled) {
+          res
+            .status(503)
+            .set({
+              'Retry-After': '300',
+              'Cache-Control': 'no-store, no-cache, must-revalidate',
+              'X-Maintenance-Mode': 'active',
+            })
+            .sendFile(indexFile);
+          return;
+        }
+      }
+      res.sendFile(indexFile);
     });
   }
 

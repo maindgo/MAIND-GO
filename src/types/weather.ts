@@ -8,6 +8,22 @@ export type PanelTab = 'overview' | 'hourly' | 'daily' | 'air';
 
 export type AppPage = 'map' | 'saved' | 'vip' | 'account';
 
+export type WeatherSoundId =
+  | 'sunny'
+  | 'rainy'
+  | 'thunderstorm'
+  | 'snow'
+  | 'windy'
+  | 'ocean'
+  | 'forest';
+
+export interface MaintenanceConfig {
+  enabled: boolean;
+  message: string;
+  updatedByUid: string;
+  updatedAt?: unknown;
+}
+
 export type SubscriptionTier = 'FREE' | 'PRO' | 'VIP';
 
 export type PlanId = 'PRO_MONTHLY' | 'VIP_ANNUAL';

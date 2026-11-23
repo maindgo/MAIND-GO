@@ -23,6 +23,7 @@ import {
 } from '../lib/firebase';
 import {
   InvoiceLineItem,
+  MaintenanceConfig,
   PaymentMethod,
   PaymentRequest,
   PlanId,
@@ -82,6 +83,9 @@ interface AuthContextValue {
     adminNote?: string
   ) => Promise<void>;
   adminGenerateAndSendInvoice: (req: PaymentRequest) => Promise<PurchaseInvoice>;
+  maintenanceConfig: MaintenanceConfig;
+  maintenanceLoaded: boolean;
+  toggleMaintenanceMode: (enabled: boolean, message?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -112,10 +116,43 @@ export function AuthProvider({children}: {children: ReactNode}) {
   const [allInvoices, setAllInvoices] = useState<PurchaseInvoice[]>([]);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [maintenanceConfig, setMaintenanceConfig] = useState<MaintenanceConfig>({
+    enabled: false,
+    message: '',
+    updatedByUid: '',
+  });
+  const [maintenanceLoaded, setMaintenanceLoaded] = useState(false);
 
   const isAdmin = Boolean(
     firebaseUser?.emailVerified && firebaseUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()
   );
+
+  // Public real-time maintenance listener so visitors & admins see instant status changes
+  useEffect(() => {
+    const unsubMaint = onSnapshot(
+      doc(db, 'appConfig', 'maintenance'),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as Partial<MaintenanceConfig>;
+          setMaintenanceConfig({
+            enabled: Boolean(data.enabled),
+            message: typeof data.message === 'string' ? data.message : '',
+            updatedByUid: typeof data.updatedByUid === 'string' ? data.updatedByUid : '',
+            updatedAt: data.updatedAt,
+          });
+        } else {
+          setMaintenanceConfig({enabled: false, message: '', updatedByUid: ''});
+        }
+        setMaintenanceLoaded(true);
+      },
+      (err) => {
+        console.warn('Maintenance config listener notice:', err);
+        setMaintenanceLoaded(true);
+      }
+    );
+
+    return () => unsubMaint();
+  }, []);
 
   const ensureUserDocs = useCallback(
     async (user: User, signupPrefs?: {displayName?: string; preferredUnits?: UnitSystem}) => {
@@ -849,6 +886,41 @@ export function AuthProvider({children}: {children: ReactNode}) {
     [firebaseUser, isAdmin]
   );
 
+  const toggleMaintenanceMode = useCallback(
+    async (enabled: boolean, message?: string) => {
+      if (!isAdmin || !firebaseUser) {
+        throw new Error('Only authorized administrators can change maintenance mode.');
+      }
+      const safeMessage = (message || '').trim().slice(0, 240);
+      try {
+        await setDoc(doc(db, 'appConfig', 'maintenance'), {
+          enabled,
+          message: safeMessage,
+          updatedByUid: firebaseUser.uid,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, 'appConfig/maintenance');
+      }
+
+      // Immediately notify server cache for HTTP 503 enforcement
+      try {
+        const idToken = await firebaseUser.getIdToken();
+        await fetch('/api/maintenance/refresh', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({enabled, message: safeMessage}),
+        });
+      } catch {
+        // Non-blocking server cache refresh (server polls Firestore automatically on TTL)
+      }
+    },
+    [isAdmin, firebaseUser]
+  );
+
   const clearAuthError = useCallback(() => setAuthError(null), []);
 
   const value: AuthContextValue = {
@@ -881,6 +953,9 @@ export function AuthProvider({children}: {children: ReactNode}) {
     adminRejectPayment,
     adminProcessRefund,
     adminGenerateAndSendInvoice,
+    maintenanceConfig,
+    maintenanceLoaded,
+    toggleMaintenanceMode,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

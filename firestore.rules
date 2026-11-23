@@ -287,6 +287,15 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
+    function isValidMaintenanceConfig(data) {
+      return data.keys().hasAll(['enabled', 'message', 'updatedByUid', 'updatedAt']) &&
+        data.keys().hasOnly(['enabled', 'message', 'updatedByUid', 'updatedAt']) &&
+        data.enabled is bool &&
+        data.message is string && data.message.size() <= 240 &&
+        data.updatedByUid is string && isValidId(data.updatedByUid) &&
+        data.updatedAt is timestamp;
+    }
+
     match /admins/{adminId} {
       allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
       allow list: if false;
@@ -466,6 +475,21 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/paymentRequests/$(incoming().paymentRequestId));
 
       allow update: if false;
+      allow delete: if false;
+    }
+
+    match /appConfig/{docId} {
+      // Public non-PII maintenance flag readable by visitors so maintenance lockdown activates before login
+      allow get: if isValidId(docId) && docId == 'maintenance';
+      allow list: if false;
+
+      allow create, update: if isValidId(docId) &&
+        docId == 'maintenance' &&
+        isAdmin() &&
+        isValidMaintenanceConfig(incoming()) &&
+        incoming().updatedByUid == request.auth.uid &&
+        incoming().updatedAt == request.time;
+
       allow delete: if false;
     }
   }

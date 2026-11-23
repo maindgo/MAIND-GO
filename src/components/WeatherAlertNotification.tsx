@@ -6,13 +6,22 @@ import {
   ExternalLink,
   Info,
   ShieldAlert,
+  Square,
+  Volume2,
   X,
 } from 'lucide-react';
 import {useEffect, useMemo, useState} from 'react';
+import {
+  isSpeechSynthesisSupported,
+  speakWeatherAlertSummary,
+  stopWeatherAlertSpeech,
+  subscribeSpeechState,
+} from '../services/ttsService';
 import {WeatherAlertItem} from '../types/weather';
 
 interface WeatherAlertNotificationProps {
   alerts: WeatherAlertItem[];
+  locationName?: string;
   timeZoneId?: string;
   isConfirmedPremium?: boolean;
 }
@@ -114,13 +123,24 @@ function getSeverityStyle(severity: string) {
 
 export function WeatherAlertNotification({
   alerts,
+  locationName,
   timeZoneId,
   isConfirmedPremium = false,
 }: WeatherAlertNotificationProps) {
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingAlertId, setSpeakingAlertId] = useState<string | null>(null);
 
   const alertKey = useMemo(() => alerts.map((a) => a.alertId).join('|'), [alerts]);
+  const ttsSupported = isSpeechSynthesisSupported();
+
+  useEffect(() => {
+    return subscribeSpeechState((speaking, activeId) => {
+      setIsSpeaking(speaking);
+      setSpeakingAlertId(activeId);
+    });
+  }, []);
 
   useEffect(() => {
     setDismissedIds([]);
@@ -148,29 +168,65 @@ export function WeatherAlertNotification({
   };
 
   const dismissAlert = (id: string) => {
+    if (speakingAlertId === id) {
+      stopWeatherAlertSpeech();
+    }
     setDismissedIds((prev) => [...prev, id]);
   };
 
+  const isPlayingPanelSummary = isSpeaking && speakingAlertId === 'panel-summary';
+
   return (
     <section aria-label="Active severe weather notifications" className="space-y-2.5">
-      <div className="flex items-center justify-between text-xs text-slate-400">
+      <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
         <span className="font-medium text-amber-200">
           Active Weather Alerts ({visibleAlerts.length})
           {isConfirmedPremium ? ' · VIP Priority Telemetry' : ''}
         </span>
-        {visibleAlerts.length > 1 && (
-          <button
-            type="button"
-            onClick={() =>
-              setExpandedIds((prev) =>
-                prev.length === visibleAlerts.length ? [] : visibleAlerts.map((a) => a.alertId)
-              )
-            }
-            className="text-[11px] text-slate-400 hover:text-slate-200 transition-colors"
-          >
-            {expandedIds.length === visibleAlerts.length ? 'Collapse all' : 'Expand all'}
-          </button>
-        )}
+        <div className="flex items-center gap-2.5">
+          {ttsSupported && (
+            <button
+              type="button"
+              onClick={() => {
+                if (isPlayingPanelSummary || isSpeaking) {
+                  stopWeatherAlertSpeech();
+                } else {
+                  speakWeatherAlertSummary(visibleAlerts, {
+                    locationName,
+                    alertId: 'panel-summary',
+                    force: true,
+                  });
+                }
+              }}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-cyan-300 hover:text-cyan-200 transition-colors"
+            >
+              {isSpeaking ? (
+                <>
+                  <Square className="w-3 h-3 fill-current" aria-hidden="true" />
+                  <span>Stop Audio</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Audio Summary</span>
+                </>
+              )}
+            </button>
+          )}
+          {visibleAlerts.length > 1 && (
+            <button
+              type="button"
+              onClick={() =>
+                setExpandedIds((prev) =>
+                  prev.length === visibleAlerts.length ? [] : visibleAlerts.map((a) => a.alertId)
+                )
+              }
+              className="text-[11px] text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              {expandedIds.length === visibleAlerts.length ? 'Collapse all' : 'Expand all'}
+            </button>
+          )}
+        </div>
       </div>
 
       {visibleAlerts.map((alert) => {
