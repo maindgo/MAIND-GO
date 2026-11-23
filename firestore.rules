@@ -1,0 +1,472 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'milanacharya9999224925@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidUserAccount(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'displayName',
+          'preferredUnits',
+          'tier',
+          'vipConfirmed',
+          'pendingPlan',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'preferredUnits',
+          'tier',
+          'vipConfirmed',
+          'pendingPlan',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.uid is string && data.uid == userId && isValidId(data.uid) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.preferredUnits is string && data.preferredUnits in ['METRIC', 'IMPERIAL'] &&
+        data.tier is string && data.tier in ['FREE', 'PRO', 'VIP'] &&
+        data.vipConfirmed is bool &&
+        data.pendingPlan is string && data.pendingPlan in ['NONE', 'PRO_MONTHLY', 'VIP_ANNUAL'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'photoUrl', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'photoUrl', 'updatedAt']) &&
+        data.uid is string && data.uid == userId && isValidId(data.uid) &&
+        data.email is string && data.email.size() <= 160 &&
+        data.photoUrl is string && data.photoUrl.size() <= 500 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSavedLocation(data, userId, locationId) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'subtitle', 'lat', 'lng', 'isHome', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'name', 'subtitle', 'lat', 'lng', 'isHome', 'createdAt']) &&
+        data.id is string && data.id == locationId && isValidId(data.id) &&
+        data.userId is string && data.userId == userId && isValidId(data.userId) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.subtitle is string && data.subtitle.size() <= 160 &&
+        data.lat is number && data.lat >= -90 && data.lat <= 90 &&
+        data.lng is number && data.lng >= -180 && data.lng <= 180 &&
+        data.isHome is bool &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidPaymentRequest(data, requestId) {
+      return data.keys().hasAll([
+          'requestId',
+          'userId',
+          'userDisplayName',
+          'userEmail',
+          'planId',
+          'amountUsd',
+          'paymentMethod',
+          'transactionRef',
+          'payerName',
+          'note',
+          'status',
+          'adminNote',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'requestId',
+          'userId',
+          'userDisplayName',
+          'userEmail',
+          'planId',
+          'originalAmountInr',
+          'discountPercent',
+          'paidAmountInr',
+          'amountUsd',
+          'paymentMethod',
+          'transactionRef',
+          'payerName',
+          'note',
+          'status',
+          'adminNote',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.requestId is string && data.requestId == requestId && isValidId(data.requestId) &&
+        data.userId is string && isValidId(data.userId) &&
+        data.userDisplayName is string && data.userDisplayName.size() >= 1 && data.userDisplayName.size() <= 80 &&
+        data.userEmail is string && data.userEmail.size() <= 160 &&
+        data.planId is string && data.planId in ['PRO_MONTHLY', 'VIP_ANNUAL'] &&
+        (!('originalAmountInr' in data) || (data.originalAmountInr is number && data.originalAmountInr > 0 && data.originalAmountInr <= 100000)) &&
+        (!('discountPercent' in data) || (data.discountPercent is number && data.discountPercent >= 0 && data.discountPercent <= 95)) &&
+        (!('paidAmountInr' in data) || (data.paidAmountInr is number && data.paidAmountInr > 0 && data.paidAmountInr <= 100000)) &&
+        data.amountUsd is number && data.amountUsd > 0 && data.amountUsd <= 1000 &&
+        data.paymentMethod is string && data.paymentMethod in ['UPI', 'CARD', 'BANK_TRANSFER', 'CRYPTO'] &&
+        data.transactionRef is string && data.transactionRef.size() >= 4 && data.transactionRef.size() <= 80 &&
+        data.payerName is string && data.payerName.size() >= 2 && data.payerName.size() <= 80 &&
+        data.note is string && data.note.size() <= 240 &&
+        data.status is string && data.status in ['PENDING_CONFIRMATION', 'CONFIRMED', 'REJECTED'] &&
+        data.adminNote is string && data.adminNote.size() <= 240 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRefundRequest(data, refundId) {
+      return data.keys().hasAll([
+          'refundId',
+          'userId',
+          'userDisplayName',
+          'userEmail',
+          'paymentRequestId',
+          'planId',
+          'paidAmountInr',
+          'paidAmountUsd',
+          'adminChargePct',
+          'refundPct',
+          'refundAmountInr',
+          'refundAmountUsd',
+          'refundUpiId',
+          'reason',
+          'status',
+          'adminNote',
+          'refundTxRef',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'refundId',
+          'userId',
+          'userDisplayName',
+          'userEmail',
+          'paymentRequestId',
+          'planId',
+          'paidAmountInr',
+          'paidAmountUsd',
+          'adminChargePct',
+          'refundPct',
+          'refundAmountInr',
+          'refundAmountUsd',
+          'refundUpiId',
+          'reason',
+          'status',
+          'adminNote',
+          'refundTxRef',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.refundId is string && data.refundId == refundId && isValidId(data.refundId) &&
+        data.userId is string && isValidId(data.userId) &&
+        data.userDisplayName is string && data.userDisplayName.size() >= 1 && data.userDisplayName.size() <= 80 &&
+        data.userEmail is string && data.userEmail.size() <= 160 &&
+        data.paymentRequestId is string && isValidId(data.paymentRequestId) &&
+        data.planId is string && data.planId in ['PRO_MONTHLY', 'VIP_ANNUAL'] &&
+        data.paidAmountInr is number && data.paidAmountInr > 0 && data.paidAmountInr <= 100000 &&
+        data.paidAmountUsd is number && data.paidAmountUsd > 0 && data.paidAmountUsd <= 1000 &&
+        data.adminChargePct is number && data.adminChargePct == 14 &&
+        data.refundPct is number && data.refundPct == 86 &&
+        data.refundAmountInr is number && data.refundAmountInr > 0 && data.refundAmountInr <= data.paidAmountInr &&
+        data.refundAmountUsd is number && data.refundAmountUsd > 0 && data.refundAmountUsd <= data.paidAmountUsd &&
+        data.refundUpiId is string && data.refundUpiId.size() >= 3 && data.refundUpiId.size() <= 100 &&
+        data.reason is string && data.reason.size() <= 240 &&
+        data.status is string && data.status in ['PENDING_REFUND', 'REFUNDED', 'REJECTED'] &&
+        data.adminNote is string && data.adminNote.size() <= 240 &&
+        data.refundTxRef is string && data.refundTxRef.size() <= 80 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPurchaseInvoice(data, invoiceId) {
+      return data.keys().hasAll([
+          'invoiceId',
+          'invoiceNumber',
+          'paymentRequestId',
+          'userId',
+          'userDisplayName',
+          'userEmail',
+          'planId',
+          'planName',
+          'originalAmountInr',
+          'discountPercent',
+          'paidAmountInr',
+          'amountUsd',
+          'transactionRef',
+          'issueDate',
+          'billingPeriod',
+          'summaryHeadline',
+          'lineItems',
+          'termsAndConditions',
+          'aiVerificationNote',
+          'sentByAdminEmail',
+          'generatedByAi',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'invoiceId',
+          'invoiceNumber',
+          'paymentRequestId',
+          'userId',
+          'userDisplayName',
+          'userEmail',
+          'planId',
+          'planName',
+          'originalAmountInr',
+          'discountPercent',
+          'paidAmountInr',
+          'amountUsd',
+          'transactionRef',
+          'issueDate',
+          'billingPeriod',
+          'summaryHeadline',
+          'lineItems',
+          'termsAndConditions',
+          'aiVerificationNote',
+          'sentByAdminEmail',
+          'generatedByAi',
+          'createdAt'
+        ]) &&
+        data.invoiceId is string && data.invoiceId == invoiceId && isValidId(data.invoiceId) &&
+        data.invoiceNumber is string && data.invoiceNumber.size() >= 4 && data.invoiceNumber.size() <= 40 &&
+        data.paymentRequestId is string && isValidId(data.paymentRequestId) &&
+        data.userId is string && isValidId(data.userId) &&
+        data.userDisplayName is string && data.userDisplayName.size() >= 1 && data.userDisplayName.size() <= 80 &&
+        data.userEmail is string && data.userEmail.size() <= 160 &&
+        data.planId is string && data.planId in ['PRO_MONTHLY', 'VIP_ANNUAL'] &&
+        data.planName is string && data.planName.size() >= 2 && data.planName.size() <= 80 &&
+        data.originalAmountInr is number && data.originalAmountInr > 0 && data.originalAmountInr <= 100000 &&
+        data.discountPercent is number && data.discountPercent >= 0 && data.discountPercent <= 95 &&
+        data.paidAmountInr is number && data.paidAmountInr > 0 && data.paidAmountInr <= 100000 &&
+        data.amountUsd is number && data.amountUsd > 0 && data.amountUsd <= 1000 &&
+        data.transactionRef is string && data.transactionRef.size() >= 4 && data.transactionRef.size() <= 80 &&
+        data.issueDate is string && data.issueDate.size() >= 4 && data.issueDate.size() <= 60 &&
+        data.billingPeriod is string && data.billingPeriod.size() >= 4 && data.billingPeriod.size() <= 80 &&
+        data.summaryHeadline is string && data.summaryHeadline.size() >= 4 && data.summaryHeadline.size() <= 180 &&
+        data.lineItems is list && data.lineItems.size() >= 1 && data.lineItems.size() <= 8 &&
+        data.lineItems[0] is map &&
+        data.lineItems[0].keys().hasOnly(['description', 'amount']) &&
+        data.lineItems[0].description is string && data.lineItems[0].description.size() <= 160 &&
+        data.lineItems[0].amount is string && data.lineItems[0].amount.size() <= 40 &&
+        data.termsAndConditions is string && data.termsAndConditions.size() <= 600 &&
+        data.aiVerificationNote is string && data.aiVerificationNote.size() <= 400 &&
+        data.sentByAdminEmail is string && data.sentByAdminEmail.size() <= 160 &&
+        data.generatedByAi is bool &&
+        data.createdAt is timestamp;
+    }
+
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if false;
+      allow write: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      // Users always start on FREE with vipConfirmed == false
+      allow create: if isValidId(userId) &&
+        isVerifiedUser() &&
+        isOwner(userId) &&
+        isValidUserAccount(incoming(), userId) &&
+        incoming().tier == 'FREE' &&
+        incoming().vipConfirmed == false &&
+        incoming().pendingPlan == 'NONE' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      // Owner can update profile prefs/pendingPlan OR cancel their own active VIP back to FREE;
+      // Owner can NEVER elevate tier or set vipConfirmed == true!
+      allow update: if isValidId(userId) &&
+        isValidUserAccount(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            isVerifiedUser() &&
+            isOwner(userId) &&
+            incoming().tier == existing().tier &&
+            incoming().vipConfirmed == existing().vipConfirmed &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'preferredUnits', 'pendingPlan', 'updatedAt'])
+          ) || (
+            isVerifiedUser() &&
+            isOwner(userId) &&
+            existing().vipConfirmed == true &&
+            incoming().tier == 'FREE' &&
+            incoming().vipConfirmed == false &&
+            incoming().pendingPlan == 'NONE' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['tier', 'vipConfirmed', 'pendingPlan', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && docId == 'info' && (isOwner(userId) || isAdmin());
+        allow list: if false;
+
+        allow create: if isValidId(userId) &&
+          isValidId(docId) &&
+          docId == 'info' &&
+          isVerifiedUser() &&
+          isOwner(userId) &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          isValidUserPrivateInfo(incoming(), userId) &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isValidId(userId) &&
+          isValidId(docId) &&
+          docId == 'info' &&
+          isVerifiedUser() &&
+          (isOwner(userId) || isAdmin()) &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          isValidUserPrivateInfo(incoming(), userId) &&
+          incoming().uid == existing().uid &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['email', 'photoUrl', 'updatedAt']) &&
+          incoming().updatedAt == request.time;
+
+        allow delete: if false;
+      }
+
+      match /savedLocations/{locationId} {
+        allow get: if isValidId(userId) && isValidId(locationId) && (isOwner(userId) || isAdmin());
+        allow list: if isValidId(userId) && isSignedIn() && (request.auth.uid == userId || isAdmin()) && resource.data.userId == userId;
+
+        allow create: if isValidId(userId) &&
+          isValidId(locationId) &&
+          isVerifiedUser() &&
+          isOwner(userId) &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          isValidSavedLocation(incoming(), userId, locationId) &&
+          incoming().createdAt == request.time;
+
+        allow update: if isValidId(userId) &&
+          isValidId(locationId) &&
+          isVerifiedUser() &&
+          isOwner(userId) &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          isValidSavedLocation(incoming(), userId, locationId) &&
+          incoming().id == existing().id &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'subtitle', 'isHome']);
+
+        allow delete: if isValidId(userId) &&
+          isValidId(locationId) &&
+          isVerifiedUser() &&
+          (isOwner(userId) || isAdmin());
+      }
+    }
+
+    match /paymentRequests/{requestId} {
+      allow get: if isValidId(requestId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      // Users can submit payment requests ONLY in PENDING_CONFIRMATION status
+      allow create: if isValidId(requestId) &&
+        isVerifiedUser() &&
+        isValidPaymentRequest(incoming(), requestId) &&
+        incoming().keys().hasAll(['originalAmountInr', 'discountPercent', 'paidAmountInr']) &&
+        incoming().userId == request.auth.uid &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        incoming().status == 'PENDING_CONFIRMATION' &&
+        incoming().adminNote == '' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      // Only Admin can confirm or reject queued payment requests; terminal states locked for non-admins
+      allow update: if isValidId(requestId) &&
+        isAdmin() &&
+        isValidPaymentRequest(incoming(), requestId) &&
+        incoming().requestId == existing().requestId &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        existing().status == 'PENDING_CONFIRMATION' &&
+        incoming().status in ['CONFIRMED', 'REJECTED'] &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminNote', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    match /refundRequests/{refundId} {
+      allow get: if isValidId(refundId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      // Confirmed VIP/PRO user can submit an 86% refund request while cancelling VIP
+      allow create: if isValidId(refundId) &&
+        isVerifiedUser() &&
+        isValidRefundRequest(incoming(), refundId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'PENDING_REFUND' &&
+        incoming().adminNote == '' &&
+        incoming().refundTxRef == '' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.vipConfirmed == true;
+
+      // Only Admin can mark refund as REFUNDED or REJECTED
+      allow update: if isValidId(refundId) &&
+        isAdmin() &&
+        isValidRefundRequest(incoming(), refundId) &&
+        incoming().refundId == existing().refundId &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        existing().status == 'PENDING_REFUND' &&
+        incoming().status in ['REFUNDED', 'REJECTED'] &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminNote', 'refundTxRef', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    match /invoices/{invoiceId} {
+      allow get: if isValidId(invoiceId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      // Only Admin can create & send official AI-generated purchase invoices
+      allow create: if isValidId(invoiceId) &&
+        isAdmin() &&
+        isValidPurchaseInvoice(incoming(), invoiceId) &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/paymentRequests/$(incoming().paymentRequestId));
+
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

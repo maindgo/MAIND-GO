@@ -1,0 +1,466 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Core user profile and confirmed subscription tier state",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "preferredUnits": {
+          "type": "string",
+          "enum": ["METRIC", "IMPERIAL"]
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["FREE", "PRO", "VIP"]
+        },
+        "vipConfirmed": {
+          "type": "boolean"
+        },
+        "pendingPlan": {
+          "type": "string",
+          "enum": ["NONE", "PRO_MONTHLY", "VIP_ANNUAL"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "preferredUnits", "tier", "vipConfirmed", "pendingPlan", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated PII document for authenticated user email and avatar URL",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "photoUrl": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "photoUrl", "updatedAt"]
+    },
+    "SavedLocation": {
+      "title": "SavedLocation",
+      "description": "Bookmarked weather coordinate saved by an authenticated user",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "subtitle": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "lat": {
+          "type": "number"
+        },
+        "lng": {
+          "type": "number"
+        },
+        "isHome": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "name", "subtitle", "lat", "lng", "isHome", "createdAt"]
+    },
+    "PaymentRequest": {
+      "title": "PaymentRequest",
+      "description": "Subscription/VIP UPI payment submission with spin-wheel discount queued for admin confirmation",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userDisplayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "userEmail": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "planId": {
+          "type": "string",
+          "enum": ["PRO_MONTHLY", "VIP_ANNUAL"]
+        },
+        "originalAmountInr": {
+          "type": "number"
+        },
+        "discountPercent": {
+          "type": "number"
+        },
+        "paidAmountInr": {
+          "type": "number"
+        },
+        "amountUsd": {
+          "type": "number"
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["UPI", "CARD", "BANK_TRANSFER", "CRYPTO"]
+        },
+        "transactionRef": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 80
+        },
+        "payerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING_CONFIRMATION", "CONFIRMED", "REJECTED"]
+        },
+        "adminNote": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "requestId",
+        "userId",
+        "userDisplayName",
+        "userEmail",
+        "planId",
+        "originalAmountInr",
+        "discountPercent",
+        "paidAmountInr",
+        "amountUsd",
+        "paymentMethod",
+        "transactionRef",
+        "payerName",
+        "note",
+        "status",
+        "adminNote",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RefundRequest": {
+      "title": "RefundRequest",
+      "description": "VIP cancellation & 86% refund request (14% administration charge)",
+      "type": "object",
+      "properties": {
+        "refundId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userDisplayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "userEmail": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "paymentRequestId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "planId": {
+          "type": "string",
+          "enum": ["PRO_MONTHLY", "VIP_ANNUAL"]
+        },
+        "paidAmountInr": {
+          "type": "number"
+        },
+        "paidAmountUsd": {
+          "type": "number"
+        },
+        "adminChargePct": {
+          "type": "number"
+        },
+        "refundPct": {
+          "type": "number"
+        },
+        "refundAmountInr": {
+          "type": "number"
+        },
+        "refundAmountUsd": {
+          "type": "number"
+        },
+        "refundUpiId": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 100
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING_REFUND", "REFUNDED", "REJECTED"]
+        },
+        "adminNote": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "refundTxRef": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "refundId",
+        "userId",
+        "userDisplayName",
+        "userEmail",
+        "paymentRequestId",
+        "planId",
+        "paidAmountInr",
+        "paidAmountUsd",
+        "adminChargePct",
+        "refundPct",
+        "refundAmountInr",
+        "refundAmountUsd",
+        "refundUpiId",
+        "reason",
+        "status",
+        "adminNote",
+        "refundTxRef",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PurchaseInvoice": {
+      "title": "PurchaseInvoice",
+      "description": "AI-generated official purchase invoice sent from Admin Dashboard to the user",
+      "type": "object",
+      "properties": {
+        "invoiceId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "invoiceNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 40
+        },
+        "paymentRequestId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userDisplayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "userEmail": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "planId": {
+          "type": "string",
+          "enum": ["PRO_MONTHLY", "VIP_ANNUAL"]
+        },
+        "planName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "originalAmountInr": {
+          "type": "number"
+        },
+        "discountPercent": {
+          "type": "number"
+        },
+        "paidAmountInr": {
+          "type": "number"
+        },
+        "amountUsd": {
+          "type": "number"
+        },
+        "transactionRef": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 80
+        },
+        "issueDate": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "billingPeriod": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "summaryHeadline": {
+          "type": "string",
+          "maxLength": 180
+        },
+        "lineItems": {
+          "type": "array"
+        },
+        "termsAndConditions": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "aiVerificationNote": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "sentByAdminEmail": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "generatedByAi": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "invoiceId",
+        "invoiceNumber",
+        "paymentRequestId",
+        "userId",
+        "userDisplayName",
+        "userEmail",
+        "planId",
+        "planName",
+        "originalAmountInr",
+        "discountPercent",
+        "paidAmountInr",
+        "amountUsd",
+        "transactionRef",
+        "issueDate",
+        "billingPeriod",
+        "summaryHeadline",
+        "lineItems",
+        "termsAndConditions",
+        "aiVerificationNote",
+        "sentByAdminEmail",
+        "generatedByAi",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserAccount"
+      },
+      "description": "User account document storing tier, confirmation status, and display preferences"
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": {
+        "$ref": "#/entities/UserPrivateInfo"
+      },
+      "description": "Strictly isolated PII subcollection for user email and avatar URL"
+    },
+    "/users/{userId}/savedLocations/{locationId}": {
+      "schema": {
+        "$ref": "#/entities/SavedLocation"
+      },
+      "description": "User's saved weather locations and home beacon"
+    },
+    "/paymentRequests/{requestId}": {
+      "schema": {
+        "$ref": "#/entities/PaymentRequest"
+      },
+      "description": "Queued subscription and VIP UPI payment confirmations awaiting admin approval"
+    },
+    "/refundRequests/{refundId}": {
+      "schema": {
+        "$ref": "#/entities/RefundRequest"
+      },
+      "description": "VIP cancellation and 86% refund queue processed by admin"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": {
+        "$ref": "#/entities/PurchaseInvoice"
+      },
+      "description": "Official AI-generated invoices sent by admin for confirmed VIP/PRO purchases"
+    }
+  }
+}
