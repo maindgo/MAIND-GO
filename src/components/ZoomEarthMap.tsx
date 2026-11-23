@@ -40,6 +40,7 @@ import {WindParticleOverlay} from './WindParticleOverlay';
 
 interface ZoomEarthMapProps {
   apiKey: string;
+  authError?: string | null;
   center: LatLngPoint;
   zoom: number;
   onCameraChange: (center: LatLngPoint, zoom: number) => void;
@@ -354,6 +355,7 @@ function MapImperativeBridge({
 
 export function ZoomEarthMap({
   apiKey,
+  authError,
   center,
   zoom,
   onCameraChange,
@@ -419,27 +421,42 @@ export function ZoomEarthMap({
     <div className="relative flex-1 h-full min-h-[420px] bg-[#07090E] overflow-hidden">
       {!apiKey && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#07090E] z-20 p-6 text-center">
-          <div className="max-w-md space-y-2">
-            <p className="text-sm font-medium text-slate-200">Google Maps API key not configured</p>
-            <p className="text-xs text-slate-400">
-              Ensure VITE_GOOGLE_MAPS_API_KEY is available to render the interactive satellite map.
+          <div className="max-w-md space-y-2.5 bg-[#0B0E17] border border-slate-800/90 rounded-2xl p-6 shadow-2xl">
+            <p className="text-sm font-semibold text-slate-100">Google Maps API key not configured</p>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Ensure <span className="font-mono text-cyan-300">VITE_GOOGLE_MAPS_API_KEY</span> is available to render
+              the interactive satellite map.
+            </p>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Add <span className="font-mono text-slate-300">VITE_GOOGLE_MAPS_API_KEY</span> to your{' '}
+              <span className="font-mono text-slate-300">.env</span> file or deployment environment variables and rebuild
+              or restart the server.
             </p>
           </div>
         </div>
       )}
 
-      {(loadingStatus === APILoadingStatus.FAILED || loadingStatus === APILoadingStatus.AUTH_FAILURE) && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#07090E]/90 z-20 p-6 text-center">
-          <div className="max-w-md space-y-2">
-            <p className="text-sm font-medium text-amber-300">Unable to load satellite map tiles</p>
-            <p className="text-xs text-slate-400">
-              Please verify network connectivity or Google Maps Platform API key permissions.
-            </p>
+      {apiKey &&
+        (Boolean(authError) ||
+          loadingStatus === APILoadingStatus.FAILED ||
+          loadingStatus === APILoadingStatus.AUTH_FAILURE) && (
+          <div className="absolute inset-0 flex items-center justify-center bg-[#07090E]/92 z-20 p-6 text-center">
+            <div className="max-w-md space-y-2.5 bg-[#0B0E17] border border-amber-500/35 rounded-2xl p-6 shadow-2xl">
+              <p className="text-sm font-semibold text-amber-300">
+                {authError || loadingStatus === APILoadingStatus.AUTH_FAILURE
+                  ? 'Google Maps API key is invalid or unauthorized'
+                  : 'Unable to load satellite map tiles'}
+              </p>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                {authError || loadingStatus === APILoadingStatus.AUTH_FAILURE
+                  ? 'Verify that VITE_GOOGLE_MAPS_API_KEY is valid, Maps JavaScript API and Places API (New) are enabled in Google Cloud, billing is active, and HTTP referrer restrictions allow this domain.'
+                  : 'Please check your network connection or Google Maps Platform API quota.'}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {apiKey && (
+      {apiKey && !authError && loadingStatus !== APILoadingStatus.AUTH_FAILURE && (
         <GoogleMap
           mapId="DEMO_MAP_ID"
           center={center}
@@ -583,7 +600,11 @@ export function ZoomEarthMap({
 
       {/* Top-Left Search Bar Overlay */}
       <div className="absolute top-4 left-4 right-4 sm:right-auto sm:w-80 z-20">
-        {isApiLoaded ? (
+        {!apiKey ||
+        Boolean(authError) ||
+        isApiLoaded ||
+        loadingStatus === APILoadingStatus.FAILED ||
+        loadingStatus === APILoadingStatus.AUTH_FAILURE ? (
           <PlaceSearchBox onSelectLocation={onSelectSearchPlace} />
         ) : (
           <div className="h-10 bg-[#111827]/90 border border-slate-800 rounded-lg px-3 flex items-center text-xs text-slate-500">

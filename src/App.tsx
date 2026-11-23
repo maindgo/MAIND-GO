@@ -51,7 +51,14 @@ import {
   WindGridSample,
 } from './types/weather';
 
-const GOOGLE_MAPS_API_KEY = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) || '';
+function resolveGoogleMapsApiKey(): string {
+  const raw = String(import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? '').trim();
+  if (!raw) return '';
+  if (/^(MY_|YOUR_|REPLACE_|undefined|null)$/i.test(raw)) return '';
+  return raw;
+}
+
+const GOOGLE_MAPS_API_KEY = resolveGoogleMapsApiKey();
 
 const DEFAULT_POINT: LatLngPoint = {lat: 37.7749, lng: -122.4194};
 const REALTIME_ALERT_POLL_MS = 60_000;
@@ -67,9 +74,24 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['places', 'marker']}>
+        {GOOGLE_MAPS_API_KEY ? (
+          <APIProvider
+            apiKey={GOOGLE_MAPS_API_KEY}
+            libraries={['places', 'marker']}
+            onError={(err) => {
+              console.error('Google Maps APIProvider load error:', err);
+              window.dispatchEvent(
+                new CustomEvent('gmp-auth-failure', {
+                  detail: err instanceof Error ? err.message : 'Unable to initialize Google Maps SDK.',
+                })
+              );
+            }}
+          >
+            <MaindGoWorkspace />
+          </APIProvider>
+        ) : (
           <MaindGoWorkspace />
-        </APIProvider>
+        )}
       </AuthProvider>
     </ErrorBoundary>
   );
@@ -91,6 +113,7 @@ function MaindGoWorkspace() {
   const isAdminUrlRoute = useMemo(() => checkIsAdminRoute(), []);
   const [introComplete, setIntroComplete] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
+  const [mapsAuthError, setMapsAuthError] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<AppPage>(() => (checkIsAdminRoute() ? 'account' : 'map'));
   const [experienceOpen, setExperienceOpen] = useState(false);
   const [previewMaintenance, setPreviewMaintenance] = useState(false);
@@ -183,11 +206,22 @@ function MaindGoWorkspace() {
     [firebaseUser, updatePreferences]
   );
 
-  // Listen for Tier 1 & Tier 2 GMP Quota Exceeded events
+  // Listen for Google Maps Platform quota & authentication failure events
   useEffect(() => {
     const handleQuota = () => setQuotaExceeded(true);
+    const handleAuthFailure = (ev: Event) => {
+      const detail = (ev as CustomEvent<string | undefined>).detail;
+      setMapsAuthError(
+        detail ||
+          'Google Maps API key authentication failed. Please verify VITE_GOOGLE_MAPS_API_KEY and API permissions.'
+      );
+    };
     window.addEventListener('gmp-quota-exceeded', handleQuota);
-    return () => window.removeEventListener('gmp-quota-exceeded', handleQuota);
+    window.addEventListener('gmp-auth-failure', handleAuthFailure);
+    return () => {
+      window.removeEventListener('gmp-quota-exceeded', handleQuota);
+      window.removeEventListener('gmp-auth-failure', handleAuthFailure);
+    };
   }, []);
 
   const loadWeatherForCoords = useCallback(
@@ -799,21 +833,19 @@ function MaindGoWorkspace() {
         />
       )}
 
-      {/* Required GMP Demo Key Quota Banner */}
-      {quotaExceeded && (
-        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm shrink-0">
+      {/* Standard Google Maps API Quota Banner */}
+      {quotaExceeded && !mapsAuthError && (
+        <div className="bg-amber-950/90 border-b border-amber-500/40 text-amber-200 px-4 py-2 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm shrink-0 flex items-center justify-center gap-3">
           <span>
-            Google Maps Platform quota reached. If you are the app owner, visit{' '}
-            <a
-              href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline font-semibold text-amber-950 hover:text-amber-800"
-            >
-              maps developer site
-            </a>{' '}
-            for instructions to update your account.
+            Unable to load full Google Maps telemetry. Please check your network connection or API quota.
           </span>
+          <button
+            type="button"
+            onClick={() => setQuotaExceeded(false)}
+            className="text-amber-300 hover:text-white underline text-xs shrink-0"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -895,6 +927,7 @@ function MaindGoWorkspace() {
             {/* Interactive Zoom Earth Satellite & Radar Map Stage */}
             <ZoomEarthMap
               apiKey={GOOGLE_MAPS_API_KEY}
+              authError={mapsAuthError}
               center={mapCenter}
               zoom={mapZoom}
               onCameraChange={(c, z) => {
