@@ -114,7 +114,8 @@ export function InvoiceModal({invoice, onClose}: InvoiceModalProps) {
               <tfoot className="bg-slate-50 border-t border-slate-200 font-semibold">
                 <tr>
                   <td className="py-3 px-4 text-slate-900">
-                    Total Net Paid via UPI ({invoice.discountPercent}% Spin Discount Applied)
+                    Total Net Paid via UPI
+                    {invoice.discountPercent > 0 ? ` (${invoice.discountPercent}% Discount Applied)` : ''}
                   </td>
                   <td className="py-3 px-4 text-right font-mono tabular-nums text-base text-slate-950">
                     ₹{invoice.paidAmountInr.toFixed(2)}{' '}

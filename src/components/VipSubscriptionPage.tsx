@@ -33,7 +33,6 @@ import {
 } from '../utils/telemetryExport';
 import {formatTempValue, tempUnitLabel} from '../utils/weatherFormat';
 import {InvoiceModal} from './InvoiceModal';
-import {SpinDiscountWheel} from './SpinDiscountWheel';
 
 interface VipSubscriptionPageProps {
   currentBundle: LocationWeatherBundle | null;
@@ -86,7 +85,6 @@ export function VipSubscriptionPage({
   } = useAuth();
 
   const [selectedPlan, setSelectedPlan] = useState<PlanId>('VIP_ANNUAL');
-  const [spinDiscount, setSpinDiscount] = useState<number | null>(null);
   const [payerName, setPayerName] = useState(userAccount?.displayName || '');
   const [transactionRef, setTransactionRef] = useState('');
   const [note, setNote] = useState('');
@@ -103,38 +101,13 @@ export function VipSubscriptionPage({
   // Invoice Modal state
   const [activeInvoice, setActiveInvoice] = useState<PurchaseInvoice | null>(null);
 
-  const storageKey = `maindgo_spin_discount_${firebaseUser?.uid || 'anon'}`;
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = Number(saved);
-        if (Number.isFinite(parsed) && parsed >= 85 && parsed <= 95) {
-          setSpinDiscount(parsed);
-        }
-      }
-    } catch {
-      // Ignore storage access restriction
-    }
-  }, [storageKey]);
-
   useEffect(() => {
     if (userAccount?.displayName && !payerName) {
       setPayerName(userAccount.displayName);
     }
   }, [userAccount?.displayName, payerName]);
 
-  const handleWinDiscount = (discountPct: number) => {
-    setSpinDiscount(discountPct);
-    try {
-      window.localStorage.setItem(storageKey, String(discountPct));
-    } catch {
-      // Ignore storage access restriction
-    }
-  };
-
-  const effectiveDiscount = spinDiscount ?? 0;
+  const effectiveDiscount = 0;
   const activePlanInfo = PLAN_PRICING[selectedPlan];
   const discountedActive = computeDiscountedPlanPricing(selectedPlan, effectiveDiscount);
   const upiUri = buildUpiPaymentUri(selectedPlan, effectiveDiscount, firebaseUser?.email);
@@ -166,7 +139,7 @@ export function VipSubscriptionPage({
       setNote('');
       setSubmitMessage({
         type: 'ok',
-        text: `UPI payment of ${discountedActive.finalInrFormatted} (${effectiveDiscount}% spin discount) submitted to the confirmation queue. Your account remains on the Free tier until our admin verifies the transfer to tntmilan06@slc.`,
+        text: `UPI payment of ${discountedActive.finalInrFormatted} submitted to the confirmation queue. Your account remains on the Free tier until our admin verifies the transfer to tntmilan06@slc.`,
       });
     } catch (err) {
       setSubmitMessage({
@@ -233,7 +206,7 @@ export function VipSubscriptionPage({
               MAIND GO Premium Plans
             </h1>
             <p className="text-sm text-slate-400 mt-1">
-              Spin for 90%–95% off, pay via UPI to <span className="font-mono text-cyan-300">{OFFICIAL_UPI_ID}</span>, and receive an official AI purchase invoice after admin confirmation.
+              Pay ₹5–₹10 directly via UPI to <span className="font-mono text-cyan-300">{OFFICIAL_UPI_ID}</span>, and receive an official AI purchase invoice after admin confirmation.
             </p>
           </div>
 
@@ -261,15 +234,6 @@ export function VipSubscriptionPage({
             )}
           </div>
         </div>
-
-        {/* Interactive VIP Spin Wheel */}
-        {!isConfirmedPremium && (
-          <SpinDiscountWheel
-            currentDiscount={spinDiscount}
-            onWinDiscount={handleWinDiscount}
-            disabled={Boolean(pendingRequest)}
-          />
-        )}
 
         {/* Active Confirmation Queue Banner when payment is pending */}
         {pendingRequest && (
@@ -354,11 +318,7 @@ export function VipSubscriptionPage({
                     <span className="uppercase tracking-wider text-amber-400">
                       {plan.tierLabel} Tier
                     </span>
-                    {spinDiscount !== null ? (
-                      <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold">
-                        {spinDiscount}% OFF
-                      </span>
-                    ) : id === 'VIP_ANNUAL' ? (
+                    {id === 'VIP_ANNUAL' ? (
                       <span className="text-amber-300">Best Value</span>
                     ) : null}
                   </div>
@@ -368,11 +328,6 @@ export function VipSubscriptionPage({
                       <span className="font-mono tabular-nums text-3xl font-bold text-white">
                         {pricing.finalInrFormatted}
                       </span>
-                      {spinDiscount !== null && (
-                        <span className="font-mono tabular-nums text-sm text-slate-500 line-through">
-                          {pricing.baseInrFormatted}
-                        </span>
-                      )}
                       <span className="text-xs font-mono text-slate-400">
                         ({pricing.finalUsdFormatted}) · {plan.periodLabel}
                       </span>
@@ -541,19 +496,11 @@ export function VipSubscriptionPage({
                     {/* Step 1: Pay via UPI App */}
                     <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 space-y-3">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-400">
-                          Step 1 · Pay via UPI App{spinDiscount !== null ? ` (${spinDiscount}% OFF)` : ''}
-                        </span>
+                        <span className="text-slate-400">Step 1 · Pay via UPI App</span>
                         <span className="font-mono font-bold text-cyan-300 tabular-nums">
                           {discountedActive.finalInrFormatted} ({discountedActive.finalUsdFormatted})
                         </span>
                       </div>
-
-                      {spinDiscount === null && (
-                        <p className="text-[11px] text-amber-300">
-                          Tip: Spin the VIP discount wheel above before paying to unlock 90%–95% off!
-                        </p>
-                      )}
 
                       <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#07090E] border border-slate-800">
                         <div className="min-w-0">
@@ -781,7 +728,7 @@ export function VipSubscriptionPage({
                   <p className="leading-relaxed">
                     {hasPendingPayment
                       ? 'Your UPI reference is in the verification queue. Unlimited saved locations, 24h & 10-day CSV exports, 2x/3x radar speeds, and dew-point/storm telemetry stay locked until your payment is confirmed.'
-                      : `Spin for your discount above, pay ${discountedActive.finalInrFormatted} (${activePlanInfo.name}) to ${OFFICIAL_UPI_ID}, and submit your UPI reference on the left.`}
+                      : `Select your plan, pay ${discountedActive.finalInrFormatted} (${activePlanInfo.name}) to ${OFFICIAL_UPI_ID}, and submit your UPI reference on the left.`}
                   </p>
                 </div>
               )}
@@ -810,7 +757,8 @@ export function VipSubscriptionPage({
                           {inv.invoiceNumber} · ₹{inv.paidAmountInr.toFixed(2)}
                         </div>
                         <div className="text-[11px] text-slate-400 truncate">
-                          {inv.planName} ({inv.discountPercent}% OFF) · Issued {inv.issueDate}
+                          {inv.planName}
+                          {inv.discountPercent > 0 ? ` (${inv.discountPercent}% OFF)` : ''} · Issued {inv.issueDate}
                         </div>
                       </div>
                       <button

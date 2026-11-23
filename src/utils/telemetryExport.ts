@@ -25,29 +25,29 @@ export const PLAN_PRICING: Record<
   PRO_MONTHLY: {
     name: 'PRO Forecaster',
     tierLabel: 'PRO',
-    inrAmount: 399,
-    inrFormatted: '₹399',
-    usdAmount: 4.99,
-    usdFormatted: '$4.99',
+    inrAmount: 5,
+    inrFormatted: '₹5',
+    usdAmount: 0.06,
+    usdFormatted: '$0.06',
     periodLabel: 'per month',
   },
   VIP_ANNUAL: {
     name: 'VIP Atmospheric Master',
     tierLabel: 'VIP',
-    inrAmount: 2999,
-    inrFormatted: '₹2,999',
-    usdAmount: 39.99,
-    usdFormatted: '$39.99',
+    inrAmount: 10,
+    inrFormatted: '₹10',
+    usdAmount: 0.12,
+    usdFormatted: '$0.12',
     periodLabel: 'per year',
   },
 };
 
-export function computeDiscountedPlanPricing(planId: PlanId, discountPercent: number) {
+export function computeDiscountedPlanPricing(planId: PlanId, discountPercent = 0) {
   const base = PLAN_PRICING[planId];
   const clampedDiscount = Math.max(0, Math.min(95, Math.round(discountPercent)));
   const factor = (100 - clampedDiscount) / 100;
   const finalInr = Math.max(1, Math.round(base.inrAmount * factor));
-  const finalUsd = Math.max(0.05, Number((base.usdAmount * factor).toFixed(2)));
+  const finalUsd = Math.max(0.01, Number((base.usdAmount * factor).toFixed(2)));
   return {
     baseInr: base.inrAmount,
     baseInrFormatted: base.inrFormatted,
@@ -64,18 +64,19 @@ export function computeDiscountedPlanPricing(planId: PlanId, discountPercent: nu
 
 export function buildUpiPaymentUri(
   planId: PlanId,
-  discountPercent: number,
+  discountPercent = 0,
   userEmail?: string | null
 ): string {
   const plan = PLAN_PRICING[planId];
   const pricing = computeDiscountedPlanPricing(planId, discountPercent);
   const emailHint = userEmail ? userEmail.replace(/[^a-zA-Z0-9@._-]/g, '').slice(0, 32) : '';
+  const discountTag = pricing.discountPercent > 0 ? ` ${pricing.discountPercent}%OFF` : '';
   const params = new URLSearchParams({
     pa: OFFICIAL_UPI_ID,
     pn: 'MAIND GO',
     am: pricing.finalInr.toFixed(2),
     cu: 'INR',
-    tn: `MAIND GO ${plan.tierLabel} ${pricing.discountPercent}%OFF${emailHint ? ` ${emailHint}` : ''}`,
+    tn: `MAIND GO ${plan.tierLabel}${discountTag}${emailHint ? ` ${emailHint}` : ''}`,
   });
   return `upi://pay?${params.toString()}`;
 }

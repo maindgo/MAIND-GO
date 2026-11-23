@@ -448,13 +448,13 @@ export function AccountAuthPage({units, onUnitsChange, onNavigate, onPreviewMain
                 <div className="flex items-center gap-3">
                   <Crown className="w-4 h-4 text-amber-400" />
                   <div>
-                    <div className="text-sm font-medium text-white">VIP, Spin Offer &amp; Cancel</div>
+                    <div className="text-sm font-medium text-white">VIP &amp; Cancel</div>
                     <div className="text-xs text-slate-400">
                       {isConfirmedPremium
                         ? `${userAccount?.tier} Confirmed & Active · Cancel for 86% Refund`
                         : hasPendingPayment
                           ? 'Payment queued — awaiting confirmation'
-                          : 'Spin for 90–95% off PRO or VIP'}
+                          : 'PRO at ₹5 · VIP at ₹10 via UPI'}
                     </div>
                   </div>
                 </div>
@@ -484,7 +484,8 @@ export function AccountAuthPage({units, onUnitsChange, onNavigate, onPreviewMain
                           {inv.invoiceNumber} · ₹{inv.paidAmountInr.toFixed(2)}
                         </div>
                         <div className="text-[11px] text-slate-400 truncate">
-                          {inv.planName} ({inv.discountPercent}% OFF)
+                          {inv.planName}
+                          {inv.discountPercent > 0 ? ` (${inv.discountPercent}% OFF)` : ''}
                         </div>
                       </div>
                       <button
@@ -713,7 +714,7 @@ export function AccountAuthPage({units, onUnitsChange, onNavigate, onPreviewMain
                             </div>
                             <div className="text-xs font-mono text-cyan-300">
                               {req.planId} · ₹{paidInr.toLocaleString('en-IN')} (${req.amountUsd.toFixed(2)})
-                              {discountPct > 0 ? ` · ${discountPct}% Spin OFF` : ''} · Ref: {req.transactionRef}
+                              {discountPct > 0 ? ` · ${discountPct}% OFF` : ''} · Ref: {req.transactionRef}
                             </div>
                             <div className="text-xs text-slate-300">
                               Payer: {req.payerName}

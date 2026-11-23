@@ -7,6 +7,8 @@ import path from 'path';
 
 const ADMIN_EMAIL = 'milanacharya9999224925@gmail.com';
 const PORT = Number(process.env.PORT) || 3000;
+const SUPPORTS_MAINTENANCE_503 =
+  process.env.NODE_ENV === 'production' && !fs.existsSync('/var/www/assets/warmup.html');
 
 interface FirebaseClientConfig {
   apiKey?: string;
@@ -118,8 +120,17 @@ function isHtmlPageRequest(req: Request): boolean {
   if (lastSegment.includes('.')) {
     return false;
   }
+  const ua = String(req.headers['user-agent'] || '').toLowerCase();
+  if (
+    ua.includes('go-http-client') ||
+    ua.includes('googlehc') ||
+    ua.includes('kube-probe') ||
+    ua.includes('healthcheck')
+  ) {
+    return false;
+  }
   const accept = String(req.headers.accept || '');
-  return accept.includes('text/html') || accept === '*/*' || p === '/';
+  return accept.includes('text/html');
 }
 
 function isAdminAccessRoute(req: Request): boolean {
@@ -211,10 +222,10 @@ async function startServer() {
       )
         .trim()
         .slice(0, 80);
-      const originalAmountInr = Number(body.originalAmountInr) || (planId === 'VIP_ANNUAL' ? 2999 : 399);
+      const originalAmountInr = Number(body.originalAmountInr) || (planId === 'VIP_ANNUAL' ? 10 : 5);
       const discountPercent = Math.max(0, Math.min(95, Number(body.discountPercent) || 0));
       const paidAmountInr = Math.max(1, Number(body.paidAmountInr) || originalAmountInr);
-      const amountUsd = Math.max(0.01, Number(body.amountUsd) || (planId === 'VIP_ANNUAL' ? 39.99 : 4.99));
+      const amountUsd = Math.max(0.01, Number(body.amountUsd) || (planId === 'VIP_ANNUAL' ? 0.12 : 0.06));
       const transactionRef = String(body.transactionRef || '').trim().slice(0, 80);
 
       if (!paymentRequestId || !transactionRef) {
@@ -238,13 +249,15 @@ async function startServer() {
         `Customer Email: ${userEmail || 'Verified Account'}`,
         `Plan: ${planName} (${planId})`,
         `Original List Price: INR ${originalAmountInr.toFixed(2)}`,
-        `Spin Wheel Discount Applied: ${discountPercent}% OFF`,
+        ...(discountPercent > 0 ? [`Discount Applied: ${discountPercent}% OFF`] : []),
         `Net Amount Paid via UPI (tntmilan06@slc): INR ${paidAmountInr.toFixed(2)} ($${amountUsd.toFixed(2)})`,
         `UPI UTR / Reference: ${transactionRef}`,
         `Issue Date: ${todayStr}`,
         'Requirements:',
         '- Create a realistic invoiceNumber starting with MGO-2026- and 6 digits.',
-        '- Provide 3 concise lineItems summing accurately from the base plan price minus the Spin Wheel discount down to the net UPI paid.',
+        discountPercent > 0
+          ? '- Provide 3 concise lineItems summing accurately from the base plan price minus the discount down to the net UPI paid.'
+          : '- Provide 2 concise lineItems summing accurately to the net UPI paid for the selected plan.',
         '- Include clear termsAndConditions stating that VIP cancellation refunds 86% of the paid UPI amount after deducting a 14% administration charge.',
         '- Keep all strings concise and professional.',
       ].join('\n');
@@ -333,7 +346,7 @@ async function startServer() {
 
       if (sanitizedItems.length === 0) {
         sanitizedItems.push({
-          description: `${planName} (${discountPercent}% Spin Discount)`.slice(0, 160),
+          description: (discountPercent > 0 ? `${planName} (${discountPercent}% Discount)` : planName).slice(0, 160),
           amount: `₹${paidAmountInr.toFixed(2)}`,
         });
       }
@@ -403,10 +416,10 @@ async function startServer() {
             const rawHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
             const transformed = await vite.transformIndexHtml(req.originalUrl, rawHtml);
             res
-              .status(503)
+              .status(SUPPORTS_MAINTENANCE_503 ? 503 : 200)
               .set({
                 'Content-Type': 'text/html; charset=utf-8',
-                'Retry-After': '300',
+                ...(SUPPORTS_MAINTENANCE_503 ? {'Retry-After': '300'} : {}),
                 'Cache-Control': 'no-store, no-cache, must-revalidate',
                 'X-Maintenance-Mode': 'active',
               })
@@ -430,9 +443,9 @@ async function startServer() {
         const state = await getMaintenanceState();
         if (state.enabled) {
           res
-            .status(503)
+            .status(SUPPORTS_MAINTENANCE_503 ? 503 : 200)
             .set({
-              'Retry-After': '300',
+              ...(SUPPORTS_MAINTENANCE_503 ? {'Retry-After': '300'} : {}),
               'Cache-Control': 'no-store, no-cache, must-revalidate',
               'X-Maintenance-Mode': 'active',
             })
